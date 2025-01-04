@@ -411,16 +411,16 @@ namespace astar
             m_linkList.erase(it);
         }
 
-        std::vector<NavigatedNodeRef>
+        std::vector<std::pair<NavigatedNodeRef, Link*>>
             CollectLinkedNode(NavigatedNode& srcNode, std::vector<NavigatedNode>& navNode)
         {
-            std::vector<NavigatedNodeRef> ret;
+            std::vector<std::pair<NavigatedNodeRef, Link*>> ret;
             for (auto it : m_linkList)
             {
                 if (srcNode != it->fromNodeId)
                     continue;
 
-                ret.push_back(*std::find(navNode.begin(), navNode.end(), it->toNodeId));
+                ret.emplace_back(*std::find(navNode.begin(), navNode.end(), it->toNodeId), it);
             }
 
             return ret;
@@ -475,12 +475,14 @@ namespace astar
                     break;
 
                 auto nearNodeList = CollectLinkedNode(sel, nodeList);
-                for (auto node : nearNodeList)
+                for (auto tuple : nearNodeList)
                 {
+                    auto node = std::get<0>(tuple);
+                    auto link = std::get<1>(tuple);
                     if (node->prevNode == &sel.ref)
                         continue;
 
-                    float g = m_functerG(sel->nodeId, node->nodeId);
+                    float g = m_functerG(sel->nodeId, node->nodeId, link);
                     if (node->g <= g + sel->g)
                         continue;
 
@@ -950,7 +952,7 @@ public:
     struct FuncterG
     {
         AStarFrame2* frame;
-        float operator()(astar::GenericPathFinder::NodeId src, astar::GenericPathFinder::NodeId dst) const
+        float operator()(astar::GenericPathFinder::NodeId src, astar::GenericPathFinder::NodeId dst, astar::GenericPathFinder::Link* link) const
         {
             auto srcPt = frame->m_nodeTable[src];
             auto dstPt = frame->m_nodeTable[dst];
@@ -1089,6 +1091,9 @@ public:
                 if (m_selectedNode == nullptr)
                     return;
 
+                if (!evt.ButtonIsDown(wxMOUSE_BTN_LEFT))
+                    return;
+
                 m_drawPanel->Refresh();
                 wxPoint newPos = m_oldNodePosition;
                 newPos += evt.GetPosition() - m_basePosition;
@@ -1097,11 +1102,6 @@ public:
 
         m_drawPanel->Bind(wxEVT_LEFT_UP, [this](wxMouseEvent& evt)
             {
-                if (m_selectedToolId == ID_MOVE_NODE && m_selectedNode != nullptr)
-                {
-                    m_selectedNode = nullptr;
-                    m_drawPanel->Refresh();
-                }
             });
 
         m_drawPanel->Bind(wxEVT_PAINT, [this](wxPaintEvent& evt)
